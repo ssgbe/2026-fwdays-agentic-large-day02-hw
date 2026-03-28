@@ -1,0 +1,51 @@
+---
+description: "Testing conventions for Excalidraw — when writing or modifying tests in packages/"
+globs: "packages/**/*.test.ts,packages/**/*.test.tsx"
+alwaysApply: false
+---
+
+# Testing Conventions
+
+## Context
+
+Excalidraw uses Vitest + jsdom. Many browser APIs (canvas, fonts, RAF, matchMedia, IndexedDB) are mocked globally in `setupTests.ts`. Tests range from pure unit tests to full UI interaction tests that render the React component and simulate pointer/keyboard input.
+
+## Rule
+
+### Test helpers — use what exists
+
+- **Element creation:** use `API.createElement({ type, x, y, ... })` from `packages/excalidraw/tests/helpers/api.ts` — never construct raw element objects manually
+- **UI interaction:** use `UI`, `Keyboard`, and `mouse` / `Pointer` helpers from `packages/excalidraw/tests/helpers/ui.ts` instead of firing raw DOM events
+- **Component rendering:** use `renderApp(<Excalidraw />)` from `packages/excalidraw/tests/test-utils.ts`, not bare `render()` — it waits for canvas initialization and resets pointer state
+- **Scene mutation in tests:** use `API.setElements()` and `API.updateElement()`, not direct `scene.*` calls
+- **Actions:** use `API.executeAction(action)` to trigger action manager actions
+
+### Snapshots
+
+- Always pass partial matchers for non-deterministic fields: `expect(el).toMatchSnapshot({ id: expect.any(String), seed: expect.any(Number), versionNonce: expect.any(Number) })`
+- NEVER update snapshots without reviewing the diff — snapshot regressions in `packages/common/src/__snapshots__/colors.test.ts.snap` indicate palette changes that affect every user
+
+### Mocking
+
+- `throttleRAF` is already mocked globally (executes immediately) — do not mock it again per-test
+- Canvas operations are handled by `vitest-canvas-mock` globally — do not stub `getContext`
+- Use `vi.spyOn` + `vi.restoreAllMocks()` in `afterEach` when spying on globals
+- Use helpers from `packages/excalidraw/tests/helpers/mocks.ts` for `HTMLImageElement` mocking (`mockHTMLImageElement`, `mockMultipleHTMLImageElements`)
+- NEVER use `vi.mock()` at module level for `@excalidraw/*` packages — path aliases resolve to source
+
+### Coverage
+
+- Branch coverage threshold is 70% — the highest of all thresholds; ensure conditional paths are tested
+- Run `yarn test:app` (not individual file runs) to validate coverage thresholds are met
+
+### Test location
+
+- Colocate tests with source: `foo.ts` → `foo.test.ts` in the same directory
+- Exception: `packages/excalidraw/tests/` for integration-level tests that render the full `<Excalidraw />` component
+- Custom spatial assertions: use `expect(...).toCloselyEqualPoints(points, precision)` from `packages/utils/src/test-utils.ts` for floating-point coordinate comparisons
+
+## How to verify
+
+1. Run `yarn test:app` — all tests must pass
+2. Run `yarn test:app --coverage` — confirm branch coverage stays ≥ 70%
+3. For snapshot changes, run `yarn test:app -u` and review every changed snapshot deliberately

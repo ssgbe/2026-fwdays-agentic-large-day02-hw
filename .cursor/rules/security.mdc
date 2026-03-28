@@ -1,0 +1,80 @@
+---
+description: "Security rules for Excalidraw — XSS prevention, safe file handling, collaboration encryption, Firebase rules"
+globs: "packages/**/*.ts,packages/**/*.tsx,excalidraw-app/**/*.ts,excalidraw-app/**/*.tsx"
+alwaysApply: false
+---
+
+# Security Rules
+
+## XSS Prevention — SVG Rendering
+
+Excalidraw can render embedded SVG elements. Never inject SVG markup directly into the DOM via `innerHTML` or `dangerouslySetInnerHTML` without sanitization.
+
+- Use `sanitizeSVG()` from `packages/excalidraw/data/blob.ts` before inserting any SVG content
+- When exporting to SVG, all user-supplied text must go through `escapeStringForSVG()` from `packages/excalidraw/utils.ts`
+- Never pass raw element `text` property into an SVG `<text>` node without escaping
+
+```ts
+// ❌ Wrong
+svgNode.innerHTML = element.text;
+
+// ✅ Correct
+svgNode.textContent = element.text; // or use escapeStringForSVG()
+```
+
+## Safe Handling of Imported Files
+
+When loading `.excalidraw` files or library files from disk/URL, treat all content as untrusted:
+
+- Always validate schema via `restore()` / `restoreElements()` from `packages/excalidraw/data/restore.ts` before putting data into scene state
+- Never `eval()` or `new Function()` from imported file content
+- URLs embedded in `link` properties of elements must be validated — only allow `https://` and `mailto:` schemes; reject `javascript:` and `data:` URLs
+
+```ts
+// ❌ Wrong
+const elements = JSON.parse(fileContent).elements;
+
+// ✅ Correct
+const { elements } = restore(JSON.parse(fileContent), null, null);
+```
+
+## Collaboration — End-to-End Encryption
+
+Excalidraw uses end-to-end encryption for collaboration sessions (room key is in the URL fragment, never sent to server):
+
+- Never log, persist, or transmit the room encryption key (`#key` fragment from the URL)
+- Do not store room keys in `localStorage`, `sessionStorage`, or Firebase
+- When passing collaboration data through `excalidraw-app/collab/`, always use the encrypted payload — never bypass `encryptData()` / `decryptData()` from `packages/excalidraw/data/encryption.ts`
+
+```ts
+// ❌ Wrong — sends plaintext scene to server
+socket.emit("scene-update", JSON.stringify(elements));
+
+// ✅ Correct — encrypt before sending
+const { ciphertext, iv } = await encryptData(key, JSON.stringify(elements));
+socket.emit("scene-update", { ciphertext, iv });
+```
+
+## Firebase Security
+
+All Firebase reads/writes go through `excalidraw-app/data/firebase.ts`:
+
+- Never write to Firebase outside of the dedicated data-access layer
+- Room data stored in Firebase is already encrypted — do not decrypt it on the server side or in Firebase Cloud Functions
+- Firebase rules must restrict room document writes to the room creator (check `uid` claim)
+
+## Content Security Policy
+
+Excalidraw sets a strict CSP. When adding new features:
+
+- Do not add `unsafe-inline` or `unsafe-eval` to the CSP in `excalidraw-app/index.html`
+- Web Workers and blob URLs used for font rendering are already whitelisted — use those patterns rather than relaxing the policy
+- If a third-party script is needed, add it to the CSP `script-src` allowlist with its exact origin, not a wildcard
+
+## How to verify
+
+1. **XSS — SVG export:** Run `yarn test:app packages/excalidraw/tests/export.test.ts` and check that strings with `<script>` in element text are properly escaped in the SVG output.
+2. **File import safety:** Add a `.excalidraw` file with a `javascript:` URL in a `link` field and confirm it is stripped after `restore()`.
+3. **Encryption:** Open a collaboration room, inspect WebSocket frames in DevTools — payloads must be binary/encrypted, not readable JSON.
+4. **CSP:** Open DevTools → Network → response headers for `index.html` and verify no `unsafe-inline` or `unsafe-eval` in `Content-Security-Policy`.
+5. **URL scheme validation:** Click a shape with `link: "javascript:alert(1)"` — the browser must not execute the script.

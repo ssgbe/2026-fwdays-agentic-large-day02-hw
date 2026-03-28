@@ -1,0 +1,27 @@
+---
+description: "Protected files that should not be modified"
+globs: "packages/excalidraw/**"
+alwaysApply: true
+---
+
+# Protected Files
+
+NEVER modify these files without explicit approval:
+
+- `packages/excalidraw/scene/renderer.ts` — render pipeline
+- `packages/excalidraw/data/restore.ts` — file format compat
+- `packages/excalidraw/actions/manager.tsx` — action system
+- `packages/excalidraw/types.ts` — core types
+
+Changes to protected files require:
+
+1. Full understanding of dependencies
+2. Running complete test suite
+3. Manual QA verification
+
+## How to verify
+
+1. **No accidental edits:** `git diff HEAD -- packages/excalidraw/scene/renderer.ts packages/excalidraw/data/restore.ts packages/excalidraw/actions/manager.tsx packages/excalidraw/types.ts` must be empty before opening a PR.
+2. **Pre-commit check:** Add this to your workflow — `git status --short | grep -E "M.*(renderer\.ts|restore\.ts|manager\.tsx|types\.ts)"` — any match means a protected file was modified.
+3. **Test suite gate:** If a protected file was intentionally changed with approval, `yarn test:all` must pass with zero failures before merging.
+4. **Dependency audit:** Before modifying `types.ts`, run `grep -rn "from.*types" packages/ --include="*.ts" --include="*.tsx" | wc -l` to understand the blast radius — a high count means high risk of type regressions.

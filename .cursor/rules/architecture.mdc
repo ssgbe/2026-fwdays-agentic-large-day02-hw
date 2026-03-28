@@ -1,0 +1,117 @@
+---
+description: "Architecture constraints for Excalidraw"
+globs: packages/excalidraw/**
+alwaysApply: false
+---
+
+# Excalidraw Architecture
+
+## State Management
+
+Main app state lives in `AppState` (packages/excalidraw/types.ts), held in the `App` class component via React `setState`. Default values are in `packages/excalidraw/appState.ts`.
+
+- **ActionManager** is the central dispatcher — actions return `ActionResult`, which `syncActionResult()` applies:
+  - `scene.replaceAllElements()` for element changes
+  - `this.setState(appState)` for UI state changes
+  - `store.scheduleAction()` for history tracking
+- **Jotai** (`packages/excalidraw/editor-jotai.ts`) is used **only for local UI state** (sidebar docking, library menu, language), never for main AppState
+- Do NOT introduce Redux, Zustand, MobX, or other global state libraries
+
+**Action pattern:**
+```typescript
+// Action definition
+type Action = {
+  name: ActionName
+  perform(elements, appState, formData, app): ActionResult
+  keyTest?(event, appState, elements, app): boolean
+  PanelComponent?: React.Component
+}
+
+// ActionResult shape
+{
+  elements?: ExcalidrawElement[]
+  appState?: Partial<AppState>
+  files?: BinaryFiles
+  captureUpdate: CaptureUpdateActionType
+}
+```
+
+## Rendering Pipeline
+
+Two-canvas strategy — never merge these layers:
+
+- **`canvas`** — static layer: background, grid, most elements (renderStaticScene)
+- **`interactiveCanvas`** — dynamic layer: selections, handles, cursors (renderInteractiveScene)
+
+Render flow:
+1. State change → `triggerRender()` → React `setState({})`
+2. `Renderer.getRenderableElements()` filters visible elements by viewport
+3. `renderStaticScene()` / `renderInteractiveScene()` draw to canvas contexts via Canvas 2D API
+4. RoughJS (`roughjs@4.6.4`) produces the hand-drawn appearance
+
+Do NOT use react-konva, fabric.js, pixi.js, or any DOM-based drawing approach.
+
+## Element System
+
+All elements extend `_ExcalidrawElementBase`. Key properties: `id`, `x/y`, `width/height`, `version/versionNonce` (for CRDT reconciliation), `index` (FractionalIndex for multiplayer ordering), `isDeleted`, `groupIds`, `frameId`, `boundElements`.
+
+**Element types:** `rectangle`, `diamond`, `ellipse`, `line`, `arrow`, `text`, `image`, `frame`, `magicframe`, `iframe`, `embeddable`
+
+**Mutation rules:**
+- Use `mutateElement(element, updates)` for in-place mutation within a render cycle
+- Use `newElementWith(element, updates)` to produce a new element for ActionResult
+- Elements in ActionResult are treated as immutable snapshots — do not mutate them after returning
+
+Scene (`packages/element/src/Scene.ts`) maintains separate arrays for deleted and non-deleted elements and increments `sceneNonce` to invalidate render caches.
+
+## Data Flow
+
+```
+User input (mouse/keyboard)
+  → Event handler in App.tsx
+  → actionManager.executeAction(action, source, value)
+  → action.perform(elements, appState, formData, app) → ActionResult
+  → syncActionResult()
+      ├─ scene.replaceAllElements()
+      ├─ this.setState(appState)
+      └─ store.scheduleAction()   ← History / undo-redo
+  → React re-render
+  → Renderer.getRenderableElements()
+  → Canvas 2D draw (staticScene + interactiveScene)
+```
+
+## Frame Ordering
+
+Frame children **must appear before their frame element** in the elements array. The required order is:
+
+```
+[other_elements..., frame1_child1, frame1_child2, frame1, ...]
+```
+
+This is required for correct rendering (clipping) and renderer performance optimizations. Always maintain this order when inserting or reordering elements programmatically.
+
+## History / Undo-Redo
+
+Managed by `Store` and `History` classes (not a third-party library). `captureUpdate` in ActionResult controls history entry creation — use the named constants:
+
+- `CaptureUpdateAction.IMMEDIATELY` — update captured for undo/redo immediately
+- `CaptureUpdateAction.EVENTUALLY` — update captured asynchronously
+- `CaptureUpdateAction.NEVER` — excluded from history (remote/init updates)
+
+Do not manipulate history state directly; use `api.history.clear()` only when resetting the entire scene.
+
+## Dependencies
+
+- No new npm packages without explicit approval
+- Check `packages/utils/` before reaching for an external helper
+- Prefer `@excalidraw/math` types (e.g., `Point`) over ad-hoc `{ x, y }` objects
+- Lodash throttle/debounce are already available — do not add a separate utility library for this
+
+## How to verify
+
+1. **No forbidden state libraries:** `grep -r "from 'redux'\|from 'zustand'\|from 'mobx'" packages/` must return no results.
+2. **Action pattern:** Open any file in `packages/excalidraw/actions/` — each action must return `ActionResult` with `captureUpdate` set via a named constant (`CaptureUpdateAction.*`), never a raw boolean.
+3. **Element mutation:** `grep -rn "element\." packages/excalidraw/actions/ | grep -v "mutateElement\|newElementWith"` — review hits to confirm no direct property assignment on elements.
+4. **Two-canvas separation:** `grep -n "renderStaticScene\|renderInteractiveScene" packages/excalidraw/components/App.tsx` — both calls must exist and target separate canvas refs.
+5. **Frame ordering:** Add a frame with children via the UI, then `console.log(app.scene.getElementsIncludingDeleted())` — frame element must appear after all its children in the array.
+6. **No new drawing libraries:** `grep -r "konva\|fabric\|pixi" package.json packages/*/package.json` must return no results.

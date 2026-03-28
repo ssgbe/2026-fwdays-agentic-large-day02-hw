@@ -1,0 +1,51 @@
+---
+description: "Code conventions for Excalidraw components and utilities"
+globs: packages/**/*.ts,packages/**/*.tsx
+alwaysApply: false
+---
+
+# Code Conventions
+
+## Components
+
+- Functional components + hooks for all new components — `App.tsx` is a legacy class component and the sole exception; do not add new class components
+- Props type named `{ComponentName}Props`, defined as `interface` (not `type`)
+- Default exports are the norm for components (matches existing codebase); named exports for utilities and types
+- Colocated tests: `ComponentName.test.tsx`
+
+## TypeScript
+
+- Strict mode is enabled — avoid `any` and `@ts-ignore`; when unavoidable, always add a comment explaining why
+- Use `import type { X } from "..."` for type-only imports (531 such imports in the codebase — follow this pattern)
+- Use `interface` for component Props; `type` for unions, aliases, and utility types
+
+## File Naming
+
+- PascalCase for component files: `LayerUI.tsx`, `ColorPicker.tsx`
+- camelCase for utility/module files: `animation-frame-handler.ts` is the exception — most utilities use camelCase (`appState.ts`, `clipboard.ts`, `gesture.ts`)
+- Test files mirror the source file name: `clipboard.test.ts`, `DefaultSidebar.test.tsx`
+
+## Naming
+
+- PascalCase for components and types/interfaces
+- camelCase for functions, variables, hooks
+- ALL_CAPS for constants
+
+## Commit Messages
+
+Use semantic prefixes (from `contributing.mdx`):
+
+```
+feat | fix | docs | style | refactor | perf | test | build | ci | chore | revert
+```
+
+Example: `feat: add lasso selection tool` / `fix: arrow binding off-screen`
+
+## How to verify
+
+1. **No class components:** `grep -rn "extends React.Component\|extends Component" packages/ --include="*.tsx"` — only `App.tsx` is allowed to appear.
+2. **`import type` usage:** `grep -rn "^import {" packages/ --include="*.ts" --include="*.tsx" | grep -v "import type"` — review hits; type-only imports must use `import type`.
+3. **Props interface naming:** `grep -rn "type.*Props\s*=" packages/ --include="*.tsx"` must return no results — props should be `interface`, not `type`.
+4. **No `any`:** `yarn test:typecheck` must pass with zero errors; additionally `grep -rn ": any\b\|as any\b" packages/` — each hit must have an explanatory comment.
+5. **Naming conventions:** `grep -rn "^const [a-z].*: React.FC" packages/ --include="*.tsx"` must return no results — React components start with PascalCase.
+6. **Colocated tests:** For every new `ComponentName.tsx` added in `components/`, a `ComponentName.test.tsx` must exist in the same directory — `ls packages/excalidraw/components/*.tsx | sed 's/.tsx/.test.tsx/' | xargs ls 2>&1 | grep "No such"` shows what's missing.

@@ -1,0 +1,77 @@
+---
+description: "Canvas renderer rules — performance, canvas API usage, and rendering pipeline for packages/excalidraw/renderer/"
+globs: packages/excalidraw/renderer/**
+alwaysApply: false
+---
+
+# Renderer Module Rules
+
+## Rendering Pipeline
+
+The renderer has two distinct pipelines — never mix their responsibilities:
+
+- **`staticScene.ts`** — renders the final scene to an offscreen canvas (PNG export, share image). Called infrequently; correctness over speed.
+- **`interactiveScene.ts`** — renders selection handles, cursors, and overlays on the interactive canvas layer. Called on every frame; speed is critical.
+- **`renderNewElementScene.ts`** — renders the element being drawn in real time. Keep this path minimal.
+
+Never call `staticScene` rendering functions from `interactiveScene` or vice versa — the canvas contexts and render configs are incompatible.
+
+## Canvas Context — Save/Restore
+
+Every function that changes `context` transform, clip, or composite operation **must** wrap its work in `context.save()` / `context.restore()`:
+
+```ts
+// ❌ Wrong — leaves transform dirty for subsequent draws
+context.translate(x, y);
+context.rotate(angle);
+drawShape(context, element);
+
+// ✅ Correct
+context.save();
+context.translate(x, y);
+context.rotate(angle);
+drawShape(context, element);
+context.restore();
+```
+
+## No Layout Reads Inside the Render Loop
+
+Do not call `getBoundingClientRect()`, `offsetWidth`, `offsetHeight`, or any DOM layout API inside a render function. These cause forced reflows and will drop frames. Compute layout values outside the render path and pass them in via the render config.
+
+## `throttleRAF` for Continuous Renders
+
+Any render that runs in response to pointer move events must be throttled with `throttleRAF` from `@excalidraw/common`:
+
+```ts
+// ❌ Wrong
+onPointerMove={() => renderInteractiveScene(config)}
+
+// ✅ Correct
+const renderThrottled = throttleRAF(renderInteractiveScene);
+onPointerMove={() => renderThrottled(config)}
+```
+
+## HiDPI / Device Pixel Ratio
+
+Always use `bootstrapCanvas()` from `./helpers` to initialize a canvas — it sets `width`, `height`, and applies the `devicePixelRatio` scale transform. Never set `canvas.width` / `canvas.height` directly in renderer code.
+
+```ts
+// ❌ Wrong
+canvas.width = appState.width;
+canvas.height = appState.height;
+
+// ✅ Correct
+const { canvas, context } = bootstrapCanvas({ canvas, scale, normalizedWidth, normalizedHeight });
+```
+
+## Dark Mode Filter
+
+When rendering in dark mode, apply `applyDarkModeFilter(color)` from `@excalidraw/common` to colors derived from element strokes — do not hardcode dark-mode color variants. Grid line colors (`GridLineColor`) in `staticScene.ts` are the canonical example.
+
+## How to verify
+
+1. **Save/restore balance:** Search for `context.translate\|context.rotate\|context.scale` in `renderer/` — each call site must have a matching `context.save()` / `context.restore()` wrapping it.
+2. **No layout reads:** `grep -n "getBoundingClientRect\|offsetWidth\|offsetHeight" packages/excalidraw/renderer/` should return no results.
+3. **`throttleRAF` usage:** In `interactiveScene.ts`, confirm pointer-triggered render calls go through `throttleRAF`.
+4. **HiDPI:** Set browser zoom to 150%, open Excalidraw — canvas elements must remain crisp (no blurry strokes).
+5. **Dark mode:** Toggle dark mode and confirm grid lines and selection handles adapt without hardcoded colors.
