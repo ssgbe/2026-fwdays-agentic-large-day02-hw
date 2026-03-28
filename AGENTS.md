@@ -36,6 +36,7 @@ Excalidraw is a **monorepo** with a clear separation between the core library an
 
 ```bash
 yarn start           # Start dev server at localhost:3000
+yarn build           # Build production bundle
 yarn test:typecheck  # TypeScript type checking
 yarn test:update     # Run all tests (with snapshot updates)
 yarn fix             # Auto-fix formatting and linting issues
@@ -44,6 +45,7 @@ yarn fix             # Auto-fix formatting and linting issues
 ## Conventions
 
 ### Naming
+
 - **Components and types/interfaces:** PascalCase — `LayerUI`, `ExcalidrawElement`, `ActionResult`
 - **Functions, variables, hooks:** camelCase — `mutateElement`, `appState`, `useExcalidrawAppState`
 - **Constants:** ALL_CAPS — `CANVAS_PADDING`, `DEFAULT_FONT_SIZE`
@@ -52,6 +54,7 @@ yarn fix             # Auto-fix formatting and linting issues
 - **Test files:** mirror source name — `clipboard.test.ts`, `DefaultSidebar.test.tsx`
 
 ### Code Style
+
 - Functional components + hooks only; `App.tsx` is the sole legacy class component
 - Props defined as `interface {Name}Props`, never as `type` or inline
 - `import type { X }` for all type-only imports
@@ -61,6 +64,7 @@ yarn fix             # Auto-fix formatting and linting issues
 - Named exports for utilities and types; default exports for components
 
 ### PR Workflow
+
 - Branch from `master`; one feature/fix per PR
 - Run `yarn test:all` locally before opening a PR
 - PR title uses semantic prefix: `feat:`, `fix:`, `docs:`, etc.

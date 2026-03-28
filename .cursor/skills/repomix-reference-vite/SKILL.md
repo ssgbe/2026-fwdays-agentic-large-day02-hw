@@ -10,10 +10,10 @@ description: Reference codebase for Vite. Use this skill when you need to unders
 ## Overview
 
 Use this skill when you need to:
-- Understand project structure and file organization
-- Find where specific functionality is implemented
-- Read source code for any file
-- Search for code patterns or keywords
+- Locate Excalidraw element types, renderers, or scene logic in the codebase
+- Find the implementation of a specific Excalidraw tool, shape, or export format
+- Trace how an element is created, mutated, bound, or rendered
+- Understand the package structure when adding a feature to `packages/excalidraw`
 
 ## Files
 
@@ -25,52 +25,65 @@ Use this skill when you need to:
 
 ## How to Use
 
-### 1. Find file locations
+### 1. Find the relevant Excalidraw file
 
-Check `project-structure.md` for the directory tree:
+Check `project-structure.md` for the directory tree. Key areas:
 
+```text
+packages/excalidraw/
+  components/App.tsx       (main editor state machine, ~12k lines)
+  element/                 (element creation, mutation, bounds, binding)
+  scene/                   (scene graph management)
+  renderer/                (canvas drawing logic)
+  actions/                 (user input → mutation mappings)
 ```
-src/
-  index.ts (42 lines)
-  utils/
-    helpers.ts (128 lines)
-```
 
-### 2. Read file contents
+### 2. Read element or component source
 
 Grep in `files.md` for the file path:
 
-```
-## File: src/utils/helpers.ts
+```text
+## File: packages/excalidraw/element/newElement.ts
 ```
 
-### 3. Search for code
+### 3. Search for Excalidraw-specific patterns
 
 Grep in `files.md` for keywords:
 
-```
-function calculateTotal
+```text
+ExcalidrawLinearElement
+mutateElement
+exportToSvg
 ```
 
 ## Common Use Cases
 
-**Understand a feature:**
-1. Search `project-structure.md` for related file names
-2. Read the main implementation file in `files.md`
-3. Search for imports/references to trace dependencies
+**Add or modify a shape/element type:**
+1. Search `project-structure.md` for `element/` directory
+2. Read `newElement.ts` and the relevant element type file in `files.md`
+3. Trace references to `ExcalidrawElement` to find all affected renderers and actions
 
-**Debug an error:**
-1. Grep the error message or class name in `files.md`
-2. Check line counts in `project-structure.md` to find large files
+**Understand the export pipeline (PNG/SVG/clipboard):**
+1. Search `files.md` for `exportToCanvas`, `exportToSvg`, or `exportToBlob`
+2. Read `packages/utils/` source for export utilities
+3. Check `renderer/` files for canvas drawing details
 
-**Find all usages:**
-1. Grep function or variable name in `files.md`
+**Trace a user action end-to-end:**
+1. Search `files.md` for the action name (e.g., `actionDeleteSelected`)
+2. Read the action definition in `actions/`
+3. Follow `mutateElement` calls into `element/` to see state changes
+
+**Debug a rendering issue:**
+1. Grep the element type or render function name in `files.md`
+2. Check `renderer/` files and `scene/` for where the element is drawn
+3. Use line counts in `project-structure.md` to gauge file complexity before reading
 
 ## Tips
 
-- Use line counts in `project-structure.md` to estimate file complexity
-- Search `## File:` pattern to jump between files
-- Check `summary.md` for excluded files, format details, and file statistics
+- `App.tsx` is very large (~12k lines); grep for a specific method before reading
+- Search `## File:` pattern to jump between files in `files.md`
+- Path aliases `@excalidraw/*` resolve to package source, not `dist/`
+- Check `summary.md` for excluded files and format details
 
 ---
 

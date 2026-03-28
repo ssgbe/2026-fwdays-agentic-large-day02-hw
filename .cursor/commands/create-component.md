@@ -27,12 +27,13 @@ Rules:
 - Import CSS Module via `import "./{Name}.scss"`
 - Use `clsx` from `clsx` for conditional class names — never string concatenation
 - All className strings must be nested under `.excalidraw {}` in the SCSS (see below) — prefix component root class with the component name (e.g., `.ColorSwatch`)
-- Use `React.FC<{Name}Props>` type annotation
+- Prefer the plain typed export (`export const {Name} = ({...}: {Name}Props) => ...`); `React.FC<{Name}Props>` is acceptable where already used or preferred
 - No inline `style={{}}` for static layout — only for dynamic values (e.g., a color derived from props)
 - Do not use `document.getElementById` or `querySelector` — use `React.useRef` if DOM access is needed
 - Accessible markup: interactive elements must have `role`, `aria-*` attributes, and keyboard handlers where appropriate
 
 Template:
+
 ```tsx
 import clsx from "clsx";
 import React from "react";
@@ -44,16 +45,20 @@ interface {Name}Props {
   className?: string;
 }
 
-export const {Name}: React.FC<{Name}Props> = ({
+// Preferred pattern (used by Button, Avatar, ColorPicker, etc.)
+export const {Name} = ({
   // destructure props
   className,
-}) => {
+}: {Name}Props) => {
   return (
     <div className={clsx("{Name}", className)}>
       {/* component content */}
     </div>
   );
 };
+
+// Alternative: React.FC form (used by Card, CheckboxItem, Modal, etc.) — both are acceptable
+// export const {Name}: React.FC<{Name}Props> = ({ className }) => { ... };
 ```
 
 ---
@@ -68,6 +73,7 @@ Rules:
 - BEM-like naming: `.{Name}` for root, `.{Name}-{part}` for children, `.{Name}--{modifier}` for states
 
 Template:
+
 ```scss
 @use "../css/theme" as *;
 @use "../css/variables.module" as *;
@@ -98,23 +104,29 @@ Rules:
 - At minimum: one render test (component appears), one interaction test (props/callbacks work)
 
 Template:
+
 ```tsx
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+
+import { renderApp } from "../../tests/test-utils";
+import { UI } from "../../tests/helpers/ui";
+import { API } from "../../tests/helpers/api";
 
 import { {Name} } from "./{Name}";
 
 describe("{Name}", () => {
-  it("renders without crashing", () => {
-    render(<{Name} {/* required props */} />);
+  it("renders without crashing", async () => {
+    await renderApp(<{Name} {/* required props */} />);
     expect(screen.getByRole("...")).toBeInTheDocument();
   });
 
-  it("calls callback on interaction", () => {
+  it("calls callback on interaction", async () => {
     const onSomething = vi.fn();
-    render(<{Name} onSomething={onSomething} {/* other required props */} />);
-    fireEvent.click(screen.getByRole("..."));
+    const element = API.createElement({ type: "rectangle" });
+    await renderApp(<{Name} onSomething={onSomething} {/* other required props */} />);
+    UI.clickTool("...");
     expect(onSomething).toHaveBeenCalledOnce();
   });
 });
@@ -133,7 +145,7 @@ Remind the user to:
 
 ## Example usage
 
-```
+```text
 /create-component
 Component name: ColorSwatch
 Props: color (string), selected (boolean), onSelect (() => void)

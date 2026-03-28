@@ -1,6 +1,6 @@
 ---
 description: "Protected files that should not be modified"
-globs: "packages/excalidraw/**"
+globs: "packages/excalidraw/scene/renderer.ts,packages/excalidraw/data/restore.ts,packages/excalidraw/actions/manager.tsx,packages/excalidraw/types.ts"
 alwaysApply: true
 ---
 
